@@ -1,0 +1,330 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "When_a_new_email_arrives": {
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['gmail-1']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/Mail/OnNewEmail",
+                    "queries": {
+                        "importance": "All",
+                        "starred": "All",
+                        "fetchOnlyWithAttachments": false,
+                        "includeAttachments": false,
+                        "label": "INBOX"
+                    }
+                },
+                "recurrence": {
+                    "interval": 30,
+                    "frequency": "Second",
+                    "timeZone": "India Standard Time",
+                    "startTime": "2025-07-11T00:00:00"
+                }
+            }
+        },
+        "actions": {
+            "HTTP": {
+                "type": "Http",
+                "inputs": {
+                    "uri": "https://<YOUR FUNCTION APP URL>.azurewebsites.net/api/autoresponder_parser?code=<Authentication Key>",
+                    "method": "POST",
+                    "body": {
+                        "text": "@{variables('cleansed_body')}"
+                    }
+                },
+                "runAfter": {
+                    "Initialize_variables_1": [
+                        "Succeeded"
+                    ]
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "Switch": {
+                "type": "Switch",
+                "expression": "@variables('case_type')",
+                "default": {
+                    "actions": {}
+                },
+                "cases": {
+                    "Case": {
+                        "actions": {
+                            "Execute_a_SQL_query_(V2)": {
+                                "type": "ApiConnection",
+                                "inputs": {
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['sql']['connectionId']"
+                                        }
+                                    },
+                                    "method": "post",
+                                    "body": {
+                                        "query": "SELECT * FROM dbo.Tours WHERE UPPER(TOUR_NAME) = UPPER('@{variables('city_name')}')"
+                                    },
+                                    "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('default'))},@{encodeURIComponent(encodeURIComponent('default'))}/query/sql"
+                                }
+                            },
+                            "Condition": {
+                                "type": "If",
+                                "expression": {
+                                    "and": [
+                                        {
+                                            "equals": [
+                                                "@length(string(body('Execute_a_SQL_query_(V2)')?['ResultSets']))",
+                                                2
+                                            ]
+                                        }
+                                    ]
+                                },
+                                "actions": {
+                                    "Reply_to_email_(V2)_2": {
+                                        "type": "ApiConnection",
+                                        "inputs": {
+                                            "host": {
+                                                "connection": {
+                                                    "name": "@parameters('$connections')['gmail-1']['connectionId']"
+                                                }
+                                            },
+                                            "method": "post",
+                                            "body": {
+                                                "To": "@triggerBody()?['From']",
+                                                "Importance": "High",
+                                                "Body": "<p class=\"editor-paragraph\">Hi @{triggerBody()?['SenderName']},</p><br><p class=\"editor-paragraph\">Thanks for writing in!</p><br><p class=\"editor-paragraph\">Unfortunately, it seems like the tour package you are looking for is not available at this point.</p><br><p class=\"editor-paragraph\">Please let us know if there are any alternative destinations in mind, and I can check up those for you.</p><br><p class=\"editor-paragraph\">Thanks,</p><p class=\"editor-paragraph\">DP Travels</p>"
+                                            },
+                                            "path": "/v2/Mail/ReplyTo/@{encodeURIComponent(triggerBody()?['Id'])}"
+                                        }
+                                    }
+                                },
+                                "else": {
+                                    "actions": {
+                                        "Reply_to_email_(V2)_3": {
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['gmail-1']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "body": {
+                                                    "To": "@triggerBody()?['From']",
+                                                    "Importance": "High",
+                                                    "Body": "<p class=\"editor-paragraph\">Hi @{triggerBody()?['SenderName']}!</p><br><p class=\"editor-paragraph\">Thanks for writing in - you're in luck.</p><br><p class=\"editor-paragraph\">We are organizing a tour for @{variables('city_name')} in the near future. The approximate per person cost would amount to @{body('Execute_a_SQL_query_(V2)')?['resultsets']?['Table1']?[0]?['Price']}.</p><br><p class=\"editor-paragraph\">Thanks,</p><p class=\"editor-paragraph\">DP Travels</p>"
+                                                },
+                                                "path": "/v2/Mail/ReplyTo/@{encodeURIComponent(triggerBody()?['Id'])}"
+                                            }
+                                        }
+                                    }
+                                },
+                                "runAfter": {
+                                    "Execute_a_SQL_query_(V2)": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            }
+                        },
+                        "case": 1
+                    },
+                    "Case_2": {
+                        "actions": {
+                            "Execute_a_SQL_query_(V2)_1": {
+                                "type": "ApiConnection",
+                                "inputs": {
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['sql']['connectionId']"
+                                        }
+                                    },
+                                    "method": "post",
+                                    "body": {
+                                        "query": "SELECT * FROM dbo.Vehicles WHERE UPPER(VEHICLE_NAME) = UPPER('@{variables('vehicle_name')}')"
+                                    },
+                                    "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('default'))},@{encodeURIComponent(encodeURIComponent('default'))}/query/sql"
+                                }
+                            },
+                            "Condition_1": {
+                                "type": "If",
+                                "expression": {
+                                    "and": [
+                                        {
+                                            "equals": [
+                                                "@length(string(body('Execute_a_SQL_query_(V2)_1')?['ResultSets']))",
+                                                2
+                                            ]
+                                        }
+                                    ]
+                                },
+                                "actions": {
+                                    "Reply_to_email_(V2)_4": {
+                                        "type": "ApiConnection",
+                                        "inputs": {
+                                            "host": {
+                                                "connection": {
+                                                    "name": "@parameters('$connections')['gmail-1']['connectionId']"
+                                                }
+                                            },
+                                            "method": "post",
+                                            "body": {
+                                                "To": "@triggerBody()?['From']",
+                                                "Body": "<p class=\"editor-paragraph\">Hi @{triggerBody()?['SenderName']},<br><br>Thanks for writing in!<br><br>Unfortunately, it seems like the vehicle you are looking for is not available at this point.<br><br>Please let us know if there are any alternative options in mind, and I can check up on those for you.<br><br>Thanks,<br>DP Travels</p>"
+                                            },
+                                            "path": "/v2/Mail/ReplyTo/@{encodeURIComponent(triggerBody()?['Id'])}"
+                                        }
+                                    }
+                                },
+                                "else": {
+                                    "actions": {
+                                        "Reply_to_email_(V2)_5": {
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['gmail-1']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "body": {
+                                                    "To": "@triggerBody()?['From']",
+                                                    "Body": "<p class=\"editor-paragraph\">Hi @{triggerBody()?['SenderName']},<br><br>Thanks for writing in - you're in luck.<br><br>We have the @{variables('vehicle_name')} that you were looking for! Our hourly rental rate would be INR @{body('Execute_a_SQL_query_(V2)_1')?['resultsets']?['Table1']?[0]?['Rate']}.</p><br><p class=\"editor-paragraph\">Please reply back if you are interested.<br><br>Thanks,<br>DP Travels</p>"
+                                                },
+                                                "path": "/v2/Mail/ReplyTo/@{encodeURIComponent(triggerBody()?['Id'])}"
+                                            }
+                                        }
+                                    }
+                                },
+                                "runAfter": {
+                                    "Execute_a_SQL_query_(V2)_1": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            }
+                        },
+                        "case": 2
+                    },
+                    "Case_3": {
+                        "actions": {
+                            "Reply_to_email_(V2)": {
+                                "type": "ApiConnection",
+                                "inputs": {
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['gmail-1']['connectionId']"
+                                        }
+                                    },
+                                    "method": "post",
+                                    "body": {
+                                        "To": "@triggerBody()?['From']",
+                                        "Cc": "wikipedia.create@gmail.com",
+                                        "Body": "<p class=\"editor-paragraph\">Dear @{triggerBody()?['SenderName']},<br><br>Thank you for the inquiry. Let me add one of our specialists to the thread who could assist you further in this matter.<br><br>Best,<br>DP Travels</p>"
+                                    },
+                                    "path": "/v2/Mail/ReplyTo/@{encodeURIComponent(triggerBody()?['Id'])}"
+                                }
+                            }
+                        },
+                        "case": 3
+                    },
+                    "Case_4": {
+                        "actions": {
+                            "Reply_to_email_(V2)_1": {
+                                "type": "ApiConnection",
+                                "inputs": {
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['gmail-1']['connectionId']"
+                                        }
+                                    },
+                                    "method": "post",
+                                    "body": {
+                                        "To": "@triggerBody()?['From']",
+                                        "Body": "<p class=\"editor-paragraph\">Dear @{triggerBody()?['SenderName']},<br><br>Thanks for your enquiry. It seems like your query is not related to the lines of business we serve - tours &amp; car rentals.<br><br>If I've understood this incorrectly - please feel free to get back with some more details and I can assist.<br><br>Best,<br>DP Travels.</p>"
+                                    },
+                                    "path": "/v2/Mail/ReplyTo/@{encodeURIComponent(triggerBody()?['Id'])}"
+                                }
+                            }
+                        },
+                        "case": 4
+                    }
+                },
+                "runAfter": {
+                    "Initialize_variables": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "Initialize_variables": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "city_name",
+                            "type": "string",
+                            "value": "@{body('HTTP')?['params']?['city_name']}"
+                        },
+                        {
+                            "name": "vehicle_name",
+                            "type": "string",
+                            "value": "@{body('HTTP')?['params']?['vehicle_name']}"
+                        },
+                        {
+                            "name": "case_type",
+                            "type": "integer",
+                            "value": "@int(body('HTTP')?['case'])"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "HTTP": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "Initialize_variables_1": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "cleansed_body",
+                            "type": "string",
+                            "value": "@{if(equals(indexOf(triggerBody()?['Body'], '<div class=\"gmail_quote gmail_quote_container\">'), -1), triggerBody()?['Body'], substring(triggerBody()?['Body'], 0, indexOf(triggerBody()?['Body'], '<div class=\"gmail_quote gmail_quote_container\">')))}"
+                        }
+                    ]
+                },
+                "runAfter": {}
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "gmail-1": {
+                    "id": "/subscriptions/5b23ff05-7638-409a-b723-58106651df3c/providers/Microsoft.Web/locations/westeurope/managedApis/gmail",
+                    "connectionId": "/subscriptions/5b23ff05-7638-409a-b723-58106651df3c/resourceGroups/rg-playground/providers/Microsoft.Web/connections/gmail-1",
+                    "connectionName": "gmail-1"
+                },
+                "sql": {
+                    "id": "/subscriptions/5b23ff05-7638-409a-b723-58106651df3c/providers/Microsoft.Web/locations/westeurope/managedApis/sql",
+                    "connectionId": "/subscriptions/5b23ff05-7638-409a-b723-58106651df3c/resourceGroups/rg-playground/providers/Microsoft.Web/connections/sql",
+                    "connectionName": "sql"
+                }
+            }
+        }
+    }
+}
